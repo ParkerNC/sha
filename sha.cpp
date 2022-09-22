@@ -28,4 +28,13 @@ std::vector<uint32_t> padd(std::vector<uint32_t> M){
 
 int main(){
 
+    std::string test1 = "This is a test of SHA-1.";
+    std::string test2 = "Kerckhoff’s principle is the foundation on which modern cryptography is built.";
+    std::string test3 = "SHA-1 is no longer considered a secure hashing algorithm.";
+    std::string test4 = "SHA-2 or SHA-3 should be used in place of SHA-1.";
+    std::string test5 = "Never roll your own crypto!";
+
+    unsigned char buffer[test1.length()];
+    memcpy(buffer, test1.data(), test1.length());
+
 }
