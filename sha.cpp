@@ -22,8 +22,17 @@ void ROTL(uint32_t x, unsigned int n){
     x = (x >> n) | (x << (32 - n));
 }
 
-std::vector<uint32_t> padd(std::vector<uint32_t> M){
+std::vector<uint8_t> padd(std::vector<uint8_t> M){
+    unsigned long l = M.size() * 8;
+    unsigned long pad = 512 - (l % 512) - 65;
 
+    if (pad < 512){
+        pad += 512;
+    }
+
+    std::cout << ((pad + l + 65) / 8) << std::endl;
+
+    return M;
 }
 
 int main(){
@@ -34,7 +43,10 @@ int main(){
     std::string test4 = "SHA-2 or SHA-3 should be used in place of SHA-1.";
     std::string test5 = "Never roll your own crypto!";
 
-    unsigned char buffer[test1.length()];
-    memcpy(buffer, test1.data(), test1.length());
+    std::vector<uint8_t> byteM(test1.begin(), test1.end());
+    std::cout << test1.length() << std::endl;
 
+    padd(byteM);
+
+    return 0;
 }
