@@ -2,8 +2,8 @@
 #include <vector>
 #include <cstring>
 #include <string>
-
-#define uchar unsigned char
+#include <iomanip>
+#include <bitset>
 
 enum K{
     t0 = 0x5a827999,
@@ -26,13 +26,32 @@ std::vector<uint8_t> padd(std::vector<uint8_t> M){
     unsigned long l = M.size() * 8;
     unsigned long pad = 512 - (l % 512) - 65;
 
-    if (pad < 512){
+    if (l >= (448 % 512)){
         pad += 512;
     }
 
     std::cout << ((pad + l + 65) / 8) << std::endl;
 
-    return M;
+    std::vector<uint8_t> paddedM((pad + l + 65)/8);
+
+    std::copy(M.begin(), M.end(), paddedM.begin());
+
+    paddedM[M.size()] = 1 << 7;
+    for (unsigned int i = 1; i < ((pad/8) - 8); i++){
+        paddedM[i + M.size()] = 0;
+    }
+
+    paddedM[paddedM.size()] = M.size();
+
+    std::cout << paddedM.size() << std::endl;
+
+    
+
+    for (long unsigned int i = 0; i < paddedM.size(); i++){
+        std::cout << std::bitset<8>(paddedM[i]) << std::endl;
+    }
+
+    return paddedM;
 }
 
 int main(){
