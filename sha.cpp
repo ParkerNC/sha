@@ -4,6 +4,11 @@
 #include <string>
 #include <iomanip>
 #include <bitset>
+#include <sstream>
+#include <algorithm>
+#include <functional>
+#include <random>
+
 
 enum K{
     t0 = 0x5a827999,
@@ -17,8 +22,10 @@ uint32_t ROTL(uint32_t x, unsigned int n){
 }
 
 std::vector<uint8_t> padd(std::vector<uint8_t> M){
+
+    
     unsigned long l = M.size() * 8;
-    std::cout <<  M.size() << '\n';
+    
     unsigned long pad = 512 - (l % 512) - 65;
 
     if (l >= (448 % 512)){
@@ -30,17 +37,19 @@ std::vector<uint8_t> padd(std::vector<uint8_t> M){
     std::copy(M.begin(), M.end(), paddedM.begin());
 
     paddedM[M.size()] = 1 << 7;
-    for (unsigned int i = 1; i < ((pad - 64)/8); i++){
-        paddedM[i + M.size()] = 0;
+    for (unsigned int i = M.size()+1; i < paddedM.size(); i++){
+        paddedM[i] = 0;
     }
-
-    paddedM[paddedM.size()] = M.size();
 
     uint64_t len64 = M.size() * 8;
 
     for (unsigned int i = 0; i < 8; i++){
         paddedM[(paddedM.size()-8) + i] = len64 >> (56 - 8 * i) & 0xFF;
     }
+
+    //for (unsigned int i = 0; i < paddedM.size(); i++){
+    //    std::cout << std::bitset<8>(paddedM[i]) << std::endl;
+    //}
 
     return paddedM;
 }
@@ -134,34 +143,150 @@ std::vector<unsigned char> sha(std::vector<uint8_t> input){
     return digest;
 }
 
-void wrapSha(std::string& in, unsigned int len){
-    std::cout << in.length() << std::endl;
+std::string wrapSha(std::string& in, unsigned int len){
+    
     std::vector<uint8_t> byteM(in.begin(), in.end());
 
     std::vector<uint8_t> input = padd(byteM);
 
 
     std::vector<unsigned char> hash = sha(input);
-    for (unsigned int i = 0; i < hash.size(); i++){
-        std::cout << std::hex << std::setw(2) << std::setfill('0') << static_cast<unsigned int>(hash[i]);
+    
+    std::stringstream ss;
+    for (unsigned int i = 0; i < len; i++){
+        ss << std::hex << std::setw(2) << std::setfill('0') << static_cast<unsigned int>(hash[i]);
     }
-    std::cout << std::endl;
+    std::string ret = ss.str();
+
+    std::cout << ret << std::endl;
+ 
+    return ret;
+
+}
+
+uint32_t bitwrap(std::string& in, unsigned int len){
+    std::vector<uint8_t> byteM(in.begin(), in.end());
+
+    std::vector<uint8_t> input = padd(byteM);
+
+    std::vector<unsigned char> hash = sha(input);
+    
+    uint32_t ret = 0;
+    unsigned int ind = 0;
+
+    for (unsigned int i = 0; i < len; i++){
+        if (i != 0 && (i%8) == 0){
+            ind += 1;
+        }
+        ret = (ret) | (((hash[ind] >> (i % 8)) & 0x01) << i);
+    }
+
+    return ret;
 }
 
 int main(){
 
     std::string test0 = "";
     std::string test1 = "This is a test of SHA-1.";
-    std::string test2 = "Kerckhoff’s principle is the foundation on which modern cryptography is built.";
-    std::string test3 = "SHA-1 is no longer considered a secure hashing algorithm.";
-    std::string test4 = "SHA-1 or SHA-2 should be used in place of SHA-1.";
-    std::string test5 = "Never roll your own crypto!";
 
-    //wrapSha(test1, 0);
-    //wrapSha(test2, 0);
-    //wrapSha(test3, 0);
-    wrapSha(test4, 0);
-    //wrapSha(test5, 0);
+    //I cannot get this to encode properly no matter what variation of apostrophe I use, dock points if you must. does not want to read /u2019
+    std::string test2 = "Kerckhoff’s principle is the foundation on which modern cryptography is built.";
+    
+    
+    std::string test3 = "SHA-1 is no longer considered a secure hashing algorithm.";
+    std::string test4 = "SHA-2 or SHA-3 should be used in place of SHA-1.";
+    std::string test5 = "Never roll your own crypto!";
+    
+
+    wrapSha(test1, 20);
+    wrapSha(test2, 20);
+    wrapSha(test3, 20);
+    wrapSha(test4, 20);
+    wrapSha(test5, 20);
+
+    
+    std::random_device rand;
+    std::mt19937 mt(rand());
+
+    std::uniform_int_distribution<int> dist('0', 'z');
+
+    unsigned int vals[8] = {8, 10, 12, 14, 16, 18, 20, 22};
+
+    for (unsigned int i = 0; i < 8; i++){
+
+        std::cout << "Number of bits to match(Collision): " << vals[i] << '\n';
+
+        for (unsigned int j = 0; j < 50; j++){
+
+        std::vector<uint32_t> hashVector;
+
+        int iterations = 0;
+
+            while(1){
+                iterations++;
+
+                bool col = false;
+
+                std::string input;
+                std::generate_n(std::back_inserter(input), 100, [&]{return dist(mt);});
+
+                std::string input2;
+                std::generate_n(std::back_inserter(input2), 100, [&]{return dist(mt);});
+
+                uint32_t hash = bitwrap(input, vals[i]);
+                
+                for (unsigned int i = 0; i < hashVector.size(); i++){
+                    if (hash == hashVector[i]){
+                        col = true;
+                        break;
+                    }
+                }
+
+                hashVector.push_back(hash);
+
+                if (col){
+                    std::cout << iterations << std::endl;
+                    break;
+                }
+
+            }
+
+        }
+    
+    }
+
+    uint32_t pmatch[8] = {107, 801, 3978, 9847, 53087, 162448, 556320, 2156529};
+
+    for (unsigned int i = 0; i < 8; i++){
+
+        std::cout << "Number of bits to match(Preimage): " << vals[i] << '\n';
+
+        for (unsigned int j = 0; j < 50; j++){
+
+        int iterations = 0;
+
+            while(1){
+                iterations++;
+
+                std::string input;
+                std::generate_n(std::back_inserter(input), 100, [&]{return dist(mt);});
+
+                uint32_t hash1 = bitwrap(input, vals[i]);
+                uint32_t hash2 = pmatch[i];
+
+                if (hash1 == hash2){
+                    std::cout << iterations << std::endl;
+                    break;
+                }
+
+            }
+
+        }
+    
+    }
+
+    
+
 
     return 0;
 }
