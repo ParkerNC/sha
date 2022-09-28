@@ -23,38 +23,44 @@ uint32_t ROTL(uint32_t x, unsigned int n){
 
 std::vector<uint8_t> padd(std::vector<uint8_t> M){
 
-    
+    //convert size to bits
     unsigned long l = M.size() * 8;
     
+    //compute padding length
     unsigned long pad = 512 - (l % 512) - 65;
 
     if (l >= (448 % 512)){
         pad += 512;
     }
 
+    //initialize vector to padded size
     std::vector<uint8_t> paddedM((pad + l + 65)/8);
 
+    //copy message into padded vector
     std::copy(M.begin(), M.end(), paddedM.begin());
 
+    //add 0x1 and 0 padding,
+    //adds 0's to the entire vector and simply overwrites them later
     paddedM[M.size()] = 1 << 7;
     for (unsigned int i = M.size()+1; i < paddedM.size(); i++){
         paddedM[i] = 0;
     }
 
+    //get 64 bit size of original message
     uint64_t len64 = M.size() * 8;
 
+    //write 64 bit length into the end of the padding
     for (unsigned int i = 0; i < 8; i++){
         paddedM[(paddedM.size()-8) + i] = len64 >> (56 - 8 * i) & 0xFF;
     }
 
-    //for (unsigned int i = 0; i < paddedM.size(); i++){
-    //    std::cout << std::bitset<8>(paddedM[i]) << std::endl;
-    //}
 
     return paddedM;
 }
 
 std::vector<unsigned char> sha(std::vector<uint8_t> input){
+
+    //generate initial hash values
     uint32_t H0 = 0x67452301;
     uint32_t H1 = 0xefcdab89;
     uint32_t H2 = 0x98badcfe;
@@ -122,6 +128,7 @@ std::vector<unsigned char> sha(std::vector<uint8_t> input){
             }
         }
 
+        //get final hash digest values
         H0 = a + H0;
         H1 = b + H1;
         H2 = c + H2;
@@ -130,7 +137,7 @@ std::vector<unsigned char> sha(std::vector<uint8_t> input){
 
     }
 
-    //digest the hash
+    //store digest values in a vector to return
     std::vector<unsigned char> digest(20);
     for (uint8_t i = 0; i < 4; i++){
         digest[i] = (H0 >> (24 - 8 * i)) & 0xFF;
@@ -144,7 +151,7 @@ std::vector<unsigned char> sha(std::vector<uint8_t> input){
 }
 
 std::string wrapSha(std::string& in, unsigned int len){
-    
+//wrapper for sha to produce sizeable strings    
     std::vector<uint8_t> byteM(in.begin(), in.end());
 
     std::vector<uint8_t> input = padd(byteM);
@@ -164,6 +171,7 @@ std::string wrapSha(std::string& in, unsigned int len){
 
 }
 
+//wrapper for sha to produce bits
 uint32_t bitwrap(std::string& in, unsigned int len){
     std::vector<uint8_t> byteM(in.begin(), in.end());
 
@@ -174,6 +182,7 @@ uint32_t bitwrap(std::string& in, unsigned int len){
     uint32_t ret = 0;
     unsigned int ind = 0;
 
+    //some masking and shifting to pull individual bits out of the digest
     for (unsigned int i = 0; i < len; i++){
         if (i != 0 && (i%8) == 0){
             ind += 1;
@@ -197,27 +206,32 @@ int main(){
     std::string test4 = "SHA-2 or SHA-3 should be used in place of SHA-1.";
     std::string test5 = "Never roll your own crypto!";
     
-
+    //test cases
     wrapSha(test1, 20);
     wrapSha(test2, 20);
     wrapSha(test3, 20);
     wrapSha(test4, 20);
     wrapSha(test5, 20);
 
-    
+    //initialize our random function,
     std::random_device rand;
     std::mt19937 mt(rand());
 
+    //initialize the range of possible input chars
     std::uniform_int_distribution<int> dist('0', 'z');
 
+    //bitsizes to use for hash length
     unsigned int vals[8] = {8, 10, 12, 14, 16, 18, 20, 22};
 
+    //collision attack loop
     for (unsigned int i = 0; i < 8; i++){
 
+        //loop through each bit size
         std::cout << "Number of bits to match(Collision): " << vals[i] << '\n';
 
         for (unsigned int j = 0; j < 50; j++){
 
+        //get 50 samples of each bit size
         std::vector<uint32_t> hashVector;
 
         int iterations = 0;
@@ -227,14 +241,13 @@ int main(){
 
                 bool col = false;
 
+                //generate random hash
                 std::string input;
                 std::generate_n(std::back_inserter(input), 100, [&]{return dist(mt);});
 
-                std::string input2;
-                std::generate_n(std::back_inserter(input2), 100, [&]{return dist(mt);});
-
                 uint32_t hash = bitwrap(input, vals[i]);
                 
+                //check if hash is in vector, if so break
                 for (unsigned int i = 0; i < hashVector.size(); i++){
                     if (hash == hashVector[i]){
                         col = true;
@@ -242,8 +255,10 @@ int main(){
                     }
                 }
 
+                //if hash is not in vector, add hash to vector
                 hashVector.push_back(hash);
 
+                //if a collision is found, print out iterations and break
                 if (col){
                     std::cout << iterations << std::endl;
                     break;
@@ -255,8 +270,10 @@ int main(){
     
     }
 
+    //array of hashes to find for preimage attacks
     uint32_t pmatch[8] = {107, 801, 3978, 9847, 53087, 162448, 556320, 2156529};
 
+    //preimage attack loop
     for (unsigned int i = 0; i < 8; i++){
 
         std::cout << "Number of bits to match(Preimage): " << vals[i] << '\n';
@@ -268,13 +285,16 @@ int main(){
             while(1){
                 iterations++;
 
+                //generate random hash
                 std::string input;
                 std::generate_n(std::back_inserter(input), 100, [&]{return dist(mt);});
 
                 uint32_t hash1 = bitwrap(input, vals[i]);
                 uint32_t hash2 = pmatch[i];
 
+                //compare random hash with target hash value,
                 if (hash1 == hash2){
+                    //if equal, print out iterations and break
                     std::cout << iterations << std::endl;
                     break;
                 }
@@ -284,9 +304,6 @@ int main(){
         }
     
     }
-
-    
-
 
     return 0;
 }

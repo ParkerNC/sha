@@ -7,7 +7,7 @@ CC = g++
 CFLAGS = -g -Wall
 
 # The build target 
-TARGET = sha
+TARGET = shax
 
 all: $(TARGET)
 
