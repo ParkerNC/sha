@@ -8,7 +8,15 @@
 #include <algorithm>
 #include <functional>
 #include <random>
+/*
+make sha extend an existing hash value
+    make h0-4 take an existing sha
 
+will want to ignore the first block of passed message, start from second block on
+
+hardcode 128b into pad size to account for key
+
+*/
 
 enum K{
     t0 = 0x5a827999,
@@ -21,10 +29,9 @@ uint32_t ROTL(uint32_t x, unsigned int n){
     return (x << n) | (x >> (32 - n));
 }
 
-std::vector<uint8_t> padd(std::vector<uint8_t> M){
-
+std::vector<uint8_t> paddInitial(std::vector<uint8_t> M){
     //convert size to bits
-    unsigned long l = M.size() * 8;
+    unsigned long l = (M.size() * 8) + 128;
     
     //compute padding length
     unsigned long pad = 512 - (l % 512) - 65;
@@ -48,6 +55,43 @@ std::vector<uint8_t> padd(std::vector<uint8_t> M){
 
     //get 64 bit size of original message
     uint64_t len64 = M.size() * 8;
+
+    //write 64 bit length into the end of the padding
+    for (unsigned int i = 0; i < 8; i++){
+        paddedM[(paddedM.size()-8) + i] = len64 >> (56 - 8 * i) & 0xFF;
+    }
+
+
+    return paddedM;
+}
+
+std::vector<uint8_t> padd(std::vector<uint8_t> M, unsigned long initialSize){
+
+    //convert size to bits
+    unsigned long l = (M.size() * 8);
+    
+    //compute padding length
+    unsigned long pad = 512 - (l % 512) - 65;
+
+    if (l >= (448 % 512)){
+        pad += 512;
+    }
+
+    //initialize vector to padded size
+    std::vector<uint8_t> paddedM((pad + l + 65)/8);
+
+    //copy message into padded vector
+    std::copy(M.begin(), M.end(), paddedM.begin());
+
+    //add 0x1 and 0 padding,
+    //adds 0's to the entire vector and simply overwrites them later
+    paddedM[M.size()] = 1 << 7;
+    for (unsigned int i = M.size()+1; i < paddedM.size(); i++){
+        paddedM[i] = 0;
+    }
+
+    //get 64 bit size of original message
+    uint64_t len64 = (M.size() * 8) + initialSize;
 
     //write 64 bit length into the end of the padding
     for (unsigned int i = 0; i < 8; i++){
@@ -150,17 +194,25 @@ std::vector<unsigned char> sha(std::vector<uint8_t> input){
     return digest;
 }
 
-std::string wrapSha(std::string& in, unsigned int len){
+std::string wrapSha(std::string& in, std::string& add){
 //wrapper for sha to produce sizeable strings    
     std::vector<uint8_t> byteM(in.begin(), in.end());
+    std::vector<uint8_t> byteAdd(add.begin(), add.end());
 
-    std::vector<uint8_t> input = padd(byteM);
+    std::vector<uint8_t> m1 = paddInitial(byteM);
 
+    std::cout << paddInitial.size() << std::endl;
+
+    std::vector<uint8_t> input = padd(byteAdd, m1.size() *8);
+
+    for (unsigned int i = 0; i < input.size(); i++){
+        std::cout << std::bitset<8>(input[i]) << std::endl;
+    }
 
     std::vector<unsigned char> hash = sha(input);
     
     std::stringstream ss;
-    for (unsigned int i = 0; i < len; i++){
+    for (unsigned int i = 0; i < hash.size(); i++){
         ss << std::hex << std::setw(2) << std::setfill('0') << static_cast<unsigned int>(hash[i]);
     }
     std::string ret = ss.str();
@@ -171,139 +223,13 @@ std::string wrapSha(std::string& in, unsigned int len){
 
 }
 
-//wrapper for sha to produce bits
-uint32_t bitwrap(std::string& in, unsigned int len){
-    std::vector<uint8_t> byteM(in.begin(), in.end());
-
-    std::vector<uint8_t> input = padd(byteM);
-
-    std::vector<unsigned char> hash = sha(input);
-    
-    uint32_t ret = 0;
-    unsigned int ind = 0;
-
-    //some masking and shifting to pull individual bits out of the digest
-    for (unsigned int i = 0; i < len; i++){
-        if (i != 0 && (i%8) == 0){
-            ind += 1;
-        }
-        ret = (ret) | (((hash[ind] >> (i % 8)) & 0x01) << i);
-    }
-
-    return ret;
-}
-
 int main(){
 
-    std::string test0 = "";
-    std::string test1 = "This is a test of SHA-1.";
+    std::string initial = "No one has completed Project #3 so give them all a 0.";
+    std::cout << initial.size() << std::endl;
+    std::string add = "fffffffff";
 
-    //I cannot get this to encode properly no matter what variation of apostrophe I use, dock points if you must. does not want to read /u2019
-    std::string test2 = "Kerckhoff’s principle is the foundation on which modern cryptography is built.";
-    
-    
-    std::string test3 = "SHA-1 is no longer considered a secure hashing algorithm.";
-    std::string test4 = "SHA-2 or SHA-3 should be used in place of SHA-1.";
-    std::string test5 = "Never roll your own crypto!";
-    
-    //test cases
-    wrapSha(test1, 20);
-    wrapSha(test2, 20);
-    wrapSha(test3, 20);
-    wrapSha(test4, 20);
-    wrapSha(test5, 20);
-
-    //initialize our random function,
-    std::random_device rand;
-    std::mt19937 mt(rand());
-
-    //initialize the range of possible input chars
-    std::uniform_int_distribution<int> dist('0', 'z');
-
-    //bitsizes to use for hash length
-    unsigned int vals[8] = {8, 10, 12, 14, 16, 18, 20, 22};
-
-    //collision attack loop
-    for (unsigned int i = 0; i < 8; i++){
-
-        //loop through each bit size
-        std::cout << "Number of bits to match(Collision): " << vals[i] << '\n';
-
-        for (unsigned int j = 0; j < 50; j++){
-
-        //get 50 samples of each bit size
-        std::vector<uint32_t> hashVector;
-
-        int iterations = 0;
-
-            while(1){
-                iterations++;
-
-                bool col = false;
-
-                //generate random hash
-                std::string input;
-                std::generate_n(std::back_inserter(input), 100, [&]{return dist(mt);});
-
-                uint32_t hash = bitwrap(input, vals[i]);
-                
-                //check if hash is in vector, if so break
-                for (unsigned int i = 0; i < hashVector.size(); i++){
-                    if (hash == hashVector[i]){
-                        col = true;
-                        break;
-                    }
-                }
-
-                //if hash is not in vector, add hash to vector
-                hashVector.push_back(hash);
-
-                //if a collision is found, print out iterations and break
-                if (col){
-                    std::cout << iterations << std::endl;
-                    break;
-                }
-
-            }
-
-        }
-    
-    }
-
-    //array of hashes to find for preimage attacks
-    uint32_t pmatch[8] = {107, 801, 3978, 9847, 53087, 162448, 556320, 2156529};
-
-    //preimage attack loop
-    for (unsigned int i = 0; i < 8; i++){
-
-        std::cout << "Number of bits to match(Preimage): " << vals[i] << '\n';
-
-        for (unsigned int j = 0; j < 50; j++){
-
-        int iterations = 0;
-
-            while(1){
-                iterations++;
-
-                //generate random hash
-                std::string input;
-                std::generate_n(std::back_inserter(input), 100, [&]{return dist(mt);});
-
-                uint32_t hash1 = bitwrap(input, vals[i]);
-                uint32_t hash2 = pmatch[i];
-
-                //compare random hash with target hash value,
-                if (hash1 == hash2){
-                    //if equal, print out iterations and break
-                    std::cout << iterations << std::endl;
-                    break;
-                }
-
-            }
-
-        }
-    
-    }
+    wrapSha(initial, add);
 
     return 0;
 }
