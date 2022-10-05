@@ -32,13 +32,15 @@ uint32_t ROTL(uint32_t x, unsigned int n){
 std::vector<uint8_t> paddInitial(std::vector<uint8_t> M){
     //convert size to bits
     unsigned long l = (M.size() * 8) + 128;
-    
+
     //compute padding length
     unsigned long pad = 512 - (l % 512) - 65;
 
-    if (l >= (448 % 512)){
+    if ((l - 128) >= (448 % 512)){
         pad += 512;
     }
+
+    pad -= 128;
 
     //initialize vector to padded size
     std::vector<uint8_t> paddedM((pad + l + 65)/8);
@@ -54,13 +56,12 @@ std::vector<uint8_t> paddInitial(std::vector<uint8_t> M){
     }
 
     //get 64 bit size of original message
-    uint64_t len64 = M.size() * 8;
+    uint64_t len64 = (M.size() * 8) + 128;
 
     //write 64 bit length into the end of the padding
     for (unsigned int i = 0; i < 8; i++){
         paddedM[(paddedM.size()-8) + i] = len64 >> (56 - 8 * i) & 0xFF;
     }
-
 
     return paddedM;
 }
@@ -91,25 +92,31 @@ std::vector<uint8_t> padd(std::vector<uint8_t> M, unsigned long initialSize){
     }
 
     //get 64 bit size of original message
-    uint64_t len64 = (M.size() * 8) + initialSize;
+    uint64_t len64 = (M.size() * 8) + initialSize + 128;
 
     //write 64 bit length into the end of the padding
     for (unsigned int i = 0; i < 8; i++){
         paddedM[(paddedM.size()-8) + i] = len64 >> (56 - 8 * i) & 0xFF;
     }
 
-
     return paddedM;
 }
 
-std::vector<unsigned char> sha(std::vector<uint8_t> input){
+std::vector<unsigned char> sha(std::vector<uint8_t> input, std::vector<uint32_t> hash){
 
-    //generate initial hash values
-    uint32_t H0 = 0x67452301;
-    uint32_t H1 = 0xefcdab89;
-    uint32_t H2 = 0x98badcfe;
-    uint32_t H3 = 0x10325476;
-    uint32_t H4 = 0xc3d2e1f0;
+    /*
+    uint32_t H0 = 0x1246034b;
+    uint32_t H1 = 0x476b0f28;
+    uint32_t H2 = 0xa2984022;
+    uint32_t H3 = 0xb01e6faa;
+    uint32_t H4 = 0x53f4b04d;
+    */
+
+    uint32_t H0 = hash[0];
+    uint32_t H1 = hash[1];
+    uint32_t H2 = hash[2];
+    uint32_t H3 = hash[3];
+    uint32_t H4 = hash[4];
 
     std::vector<uint32_t> W(80);
     //for loop for parsing 512bit(64byte) blocks
@@ -194,22 +201,28 @@ std::vector<unsigned char> sha(std::vector<uint8_t> input){
     return digest;
 }
 
-std::string wrapSha(std::string& in, std::string& add){
+std::string wrapSha(std::string& in, std::string& add, std::vector<uint32_t> inHash){
 //wrapper for sha to produce sizeable strings    
     std::vector<uint8_t> byteM(in.begin(), in.end());
     std::vector<uint8_t> byteAdd(add.begin(), add.end());
 
     std::vector<uint8_t> m1 = paddInitial(byteM);
 
-    std::cout << paddInitial.size() << std::endl;
+    std::vector<uint8_t> input = padd(byteAdd, m1.size() * 8);
 
-    std::vector<uint8_t> input = padd(byteAdd, m1.size() *8);
+    std::vector<unsigned char> hash = sha(input, inHash);
 
-    for (unsigned int i = 0; i < input.size(); i++){
-        std::cout << std::bitset<8>(input[i]) << std::endl;
+    //initialize vector to padded size
+    std::vector<uint8_t> bigM;
+
+    bigM.reserve(byteAdd.size() + m1.size());
+    bigM.insert(bigM.end(), m1.begin(), m1.end());
+    bigM.insert(bigM.end(), byteAdd.begin(), byteAdd.end());
+
+    for(unsigned int i = 0; i < bigM.size(); i++){
+        std::cout << std::hex << std::setw(2) << std::setfill('0') << static_cast<unsigned int>(bigM[i]);
     }
-
-    std::vector<unsigned char> hash = sha(input);
+    std::cout << std::endl;
     
     std::stringstream ss;
     for (unsigned int i = 0; i < hash.size(); i++){
@@ -226,10 +239,19 @@ std::string wrapSha(std::string& in, std::string& add){
 int main(){
 
     std::string initial = "No one has completed Project #3 so give them all a 0.";
-    std::cout << initial.size() << std::endl;
-    std::string add = "fffffffff";
+    std::string add = "Fail us all";
 
-    wrapSha(initial, add);
+    std::string hash = "56ddbfdc23b6df04be71c4dde7c3f526183bc551";
+    //hash = "1246034b476b0f28a2984022b01e6faa53f4b04d";
+
+    std::vector<uint32_t> hashBytes;
+    for (unsigned int i = 0; i < hash.length(); i += 8){
+        std::string sub = hash.substr(i, 8);
+        uint32_t byte = (uint32_t) strtol(sub.c_str(), NULL, 16);
+        hashBytes.push_back(byte);
+    }
+
+    wrapSha(initial, add, hashBytes);
 
     return 0;
 }
